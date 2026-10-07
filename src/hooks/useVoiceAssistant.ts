@@ -3,6 +3,8 @@ import type { VoiceState, MatchResult, AppSettings } from '../types/types'
 import { voiceAssistantService } from '../services/voiceAssistant'
 import { speechRecognitionService } from '../services/speechRecognition'
 
+import { Capacitor } from '@capacitor/core'
+
 export interface UseVoiceAssistantOptions {
   settings?: AppSettings
   onMatchedObject?: (result: MatchResult) => void
@@ -14,12 +16,12 @@ export function useVoiceAssistant({
   onMatchedObject,
   active = true,
 }: UseVoiceAssistantOptions = {}) {
-  const isSupported = speechRecognitionService.isSupported()
+  const isSupported = Capacitor.isNativePlatform() || speechRecognitionService.isSupported()
   const [state, setState] = useState<VoiceState>(voiceAssistantService.getListeningState())
   const [stateDetail, setStateDetail] = useState<string>(voiceAssistantService.getStateDetail())
   const [liveTranscript, setLiveTranscript] = useState<string>('')
   const [error, setError] = useState<string | null>(
-    !isSupported ? 'Web Speech API is not supported on this browser.' : null
+    !isSupported ? 'Voice recognition is not supported on this browser.' : null
   )
 
   // Update voice assistant config whenever settings change

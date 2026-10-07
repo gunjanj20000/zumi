@@ -52,6 +52,8 @@ export interface VoiceAssistantService {
   recognizeObjectName(transcript: string): string
   matchObject(objectName: string): MatchResult
   getListeningState(): VoiceState
+  getStateDetail(): string
+  updateConfig(settings: AppSettings): void
   onStateChange(cb: (state: VoiceState, detail?: string) => void): () => void
   onTranscript(cb: (transcript: string, isFinal: boolean) => void): () => void
   onCommandDetected(cb: (command: string, result: MatchResult) => void): () => void

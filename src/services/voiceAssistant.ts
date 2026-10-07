@@ -266,4 +266,11 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
   }
 }
 
-export const voiceAssistantService = new BrowserVoiceAssistantService()
+import { Capacitor } from '@capacitor/core'
+import { NativeAndroidVoiceAssistantService } from './nativeVoiceAssistant'
+
+export const voiceAssistantService: VoiceAssistantService =
+  typeof window !== 'undefined' && Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
+    ? new NativeAndroidVoiceAssistantService()
+    : new BrowserVoiceAssistantService()
+
