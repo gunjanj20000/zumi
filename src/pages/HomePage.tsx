@@ -37,12 +37,12 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // Handler when an object is chosen
   const handleSelectObject = useCallback(
-    async (obj: ObjectCard) => {
+    async (obj: ObjectCard, shouldSpeak = true) => {
       setSelectedObject(obj)
       setTypedQuery('')
       setDisambiguationChoices(null)
 
-      if (settings.autoSpeak) {
+      if (settings.autoSpeak && shouldSpeak) {
         try {
           await speak(obj.name, settings.ttsLanguage)
         } catch {
@@ -58,7 +58,8 @@ export const HomePage: React.FC<HomePageProps> = ({
     (result: MatchResult) => {
       if (result.status === 'exact' || result.status === 'confident') {
         if (result.object) {
-          handleSelectObject(result.object)
+          // voiceAssistantService already handles TTS pronunciation; do not double speak
+          handleSelectObject(result.object, false)
         }
       } else if (result.status === 'ambiguous' && result.candidates && result.candidates.length > 0) {
         setDisambiguationChoices(result.candidates)

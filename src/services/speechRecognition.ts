@@ -1,5 +1,6 @@
 /**
- * Web Speech API SpeechRecognition wrapper with continuous listening & auto-restart.
+ * Web Speech API SpeechRecognition wrapper with continuous listening,
+ * auto-restart, and watchdog timer recovery.
  */
 
 // Define SpeechRecognition types for browsers
@@ -26,10 +27,12 @@ export class BrowserSpeechRecognitionService {
   private language = 'en-US'
   private listeners: Set<SpeechRecognitionListener> = new Set()
   private restartTimeout: any = null
+  private watchdogInterval: any = null
   private permissionDenied = false
 
   constructor() {
-    this.initRecognition()
+    this.createRecognitionInstance()
+    this.startWatchdog()
   }
 
   public isSupported(): boolean {
@@ -37,10 +40,25 @@ export class BrowserSpeechRecognitionService {
     return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   }
 
-  private initRecognition(): void {
+  private createRecognitionInstance(): void {
     if (!this.isSupported()) return
 
     const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition
+
+    // If an existing instance exists, try to abort/detach it
+    if (this.recognition) {
+      try {
+        this.recognition.onstart = null
+        this.recognition.onresult = null
+        this.recognition.onerror = null
+        this.recognition.onend = null
+        this.recognition.abort()
+      } catch {
+        // ignore
+      }
+      this.recognition = null
+    }
+
     try {
       this.recognition = new SpeechRecognitionClass()
       this.recognition.continuous = true
@@ -78,7 +96,8 @@ export class BrowserSpeechRecognitionService {
 
       this.recognition.onerror = (event: any) => {
         const error = event.error
-        // Ignore normal no-speech or aborted events
+
+        // 'no-speech' is normal silence; ignore
         if (error === 'no-speech') {
           return
         }
@@ -89,6 +108,11 @@ export class BrowserSpeechRecognitionService {
           this.listeners.forEach((l) =>
             l.onError('Microphone permission is needed for voice assistant.')
           )
+          return
+        }
+
+        if (error === 'aborted') {
+          // Normal when restarting or stopping
           return
         }
 
@@ -108,21 +132,31 @@ export class BrowserSpeechRecognitionService {
           if (this.restartTimeout) clearTimeout(this.restartTimeout)
           this.restartTimeout = setTimeout(() => {
             this.safeStart()
-          }, 350)
+          }, 300)
         }
       }
     } catch (err) {
-      console.error('Failed to initialize SpeechRecognition:', err)
+      console.error('Failed to create SpeechRecognition instance:', err)
     }
+  }
+
+  private startWatchdog(): void {
+    if (typeof window === 'undefined') return
+
+    // Watchdog check every 1.5 seconds: ensures the assistant never dies silently
+    this.watchdogInterval = setInterval(() => {
+      if (this.shouldKeepListening && !this.isListening && !this.permissionDenied) {
+        this.safeStart()
+      }
+    }, 1500)
   }
 
   public setLanguage(lang: string): void {
     this.language = lang
     if (this.recognition) {
       this.recognition.lang = lang
-      // If currently listening, restart to apply new language
       if (this.isListening) {
-        this.recognition.stop()
+        this.restart()
       }
     }
   }
@@ -140,17 +174,29 @@ export class BrowserSpeechRecognitionService {
     this.safeStart()
   }
 
-  private safeStart(): void {
+  public safeStart(): void {
     if (!this.recognition) {
-      this.initRecognition()
+      this.createRecognitionInstance()
     }
     if (!this.recognition || this.isListening) return
 
     try {
       this.recognition.start()
     } catch (err: any) {
-      // If already started, ignore InvalidStateError
-      if (err.name !== 'InvalidStateError') {
+      // If already started or transitioning, retry shortly
+      if (err.name === 'InvalidStateError') {
+        if (this.restartTimeout) clearTimeout(this.restartTimeout)
+        this.restartTimeout = setTimeout(() => {
+          if (this.shouldKeepListening && !this.isListening) {
+            this.createRecognitionInstance()
+            try {
+              this.recognition?.start()
+            } catch {
+              // ignore
+            }
+          }
+        }, 350)
+      } else {
         console.warn('SpeechRecognition start warning:', err)
       }
     }
@@ -162,9 +208,13 @@ export class BrowserSpeechRecognitionService {
       clearTimeout(this.restartTimeout)
       this.restartTimeout = null
     }
-    if (this.recognition && this.isListening) {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval)
+      this.watchdogInterval = null
+    }
+    if (this.recognition) {
       try {
-        this.recognition.stop()
+        this.recognition.abort()
       } catch {
         // ignore
       }
@@ -172,10 +222,23 @@ export class BrowserSpeechRecognitionService {
     this.isListening = false
   }
 
+  /**
+   * Performs a clean restart by aborting current session and starting fresh.
+   */
   public restart(): void {
-    this.stop()
-    setTimeout(() => {
-      this.start()
+    if (!this.shouldKeepListening) return
+    this.isListening = false
+    if (this.restartTimeout) clearTimeout(this.restartTimeout)
+
+    try {
+      this.recognition?.abort()
+    } catch {
+      // ignore
+    }
+
+    this.restartTimeout = setTimeout(() => {
+      this.createRecognitionInstance()
+      this.safeStart()
     }, 200)
   }
 

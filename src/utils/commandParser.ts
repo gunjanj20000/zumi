@@ -112,6 +112,7 @@ const COMMAND_PREFIXES = [
 
 /**
  * Checks if text contains the wake phrase and extracts the command.
+ * Uses lastIndexOf to prioritize the most recent command utterance in continuous transcripts.
  */
 export function parseVoiceCommand(
   rawTranscript: string,
@@ -140,9 +141,10 @@ export function parseVoiceCommand(
     }
   }
 
-  // Check for wake phrase match
+  // Check for the latest wake phrase match across the transcript
   let hasWakePhrase = false
-  let remainingAfterWake = normalized
+  let bestIndex = -1
+  let matchedPattern = ''
 
   for (const pattern of wakePatterns) {
     if (normalized === pattern) {
@@ -155,17 +157,28 @@ export function parseVoiceCommand(
       }
     }
 
-    if (normalized.startsWith(pattern + ' ')) {
-      hasWakePhrase = true
-      remainingAfterWake = normalized.slice(pattern.length).trim()
-      break
-    } else if (normalized.includes(' ' + pattern + ' ')) {
-      // e.g. "say hey zumi show apple"
-      hasWakePhrase = true
-      const idx = normalized.indexOf(' ' + pattern + ' ')
-      remainingAfterWake = normalized.slice(idx + pattern.length + 2).trim()
-      break
+    const lastIdx = normalized.lastIndexOf(pattern)
+    if (lastIdx !== -1) {
+      // Check word boundaries
+      const isStart = lastIdx === 0
+      const isWordBefore = isStart || normalized[lastIdx - 1] === ' '
+      const endIdx = lastIdx + pattern.length
+      const isEnd = endIdx === normalized.length
+      const isWordAfter = isEnd || normalized[endIdx] === ' '
+
+      if (isWordBefore && isWordAfter) {
+        if (lastIdx > bestIndex) {
+          bestIndex = lastIdx
+          matchedPattern = pattern
+          hasWakePhrase = true
+        }
+      }
     }
+  }
+
+  let remainingAfterWake = normalized
+  if (hasWakePhrase && bestIndex !== -1) {
+    remainingAfterWake = normalized.slice(bestIndex + matchedPattern.length).trim()
   }
 
   // Now strip command action phrases from remainingAfterWake
@@ -190,8 +203,6 @@ export function parseVoiceCommand(
   }
 
   // Strip leading articles/fillers if still present: "the ", "a ", "an ", "my "
-  // e.g. "please show me the apple" -> remaining was "the apple" -> strips "the" -> "apple"
-  // Note: if user said "show me the red ball", this yields "red ball"
   const leadingFillers = ['the ', 'a ', 'an ', 'my ', 'please ']
   for (const filler of leadingFillers) {
     if (cleanedCommand.startsWith(filler)) {

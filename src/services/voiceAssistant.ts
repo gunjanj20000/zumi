@@ -40,6 +40,8 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
 
     if (!settings.voiceAssistantEnabled || !settings.alwaysListening) {
       this.stopAlwaysListening()
+    } else if (this.state === 'IDLE') {
+      this.startAlwaysListening()
     }
   }
 
@@ -55,7 +57,7 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
         }
       },
       onEnd: () => {
-        // Will auto-restart via speechRecognitionService if active
+        // Handled via speechRecognitionService auto-restart & watchdog
       },
       onResult: (transcript: string, isFinal: boolean) => {
         this.transcriptListeners.forEach((cb) => cb(transcript, isFinal))
@@ -133,13 +135,37 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
    * Core voice pipeline handler.
    */
   private handleTranscript(transcript: string, isFinal: boolean): void {
-    if (this.state === 'MATCHING' || this.state === 'OBJECT_FOUND') {
-      return // Processing current object
+    // If currently matching in-memory, allow it to complete (< 5ms)
+    if (this.state === 'MATCHING') {
+      return
     }
 
     const parsed = parseVoiceCommand(transcript, this.wakePhrase)
 
-    // Scenario A: Currently in LISTENING_FOR_OBJECT state (wake word was previously detected)
+    // Scenario A: If user speaks a new command with wake phrase (even during OBJECT_FOUND),
+    // immediately honor the new command so consecutive commands are instant!
+    if (parsed.hasWakePhrase) {
+      if (parsed.isWakeOnly || !parsed.extractedName) {
+        // Child said "Hey Zumi"
+        this.clearTimeouts()
+        ttsService.cancel()
+        this.setState('LISTENING_FOR_OBJECT', 'Listening for object...')
+
+        this.activeWakeTimeout = setTimeout(() => {
+          if (this.state === 'LISTENING_FOR_OBJECT') {
+            this.setState('LISTENING', 'Zumi is listening')
+          }
+        }, 6000)
+      } else {
+        // Child said full command: "Hey Zumi, show Apple"
+        this.clearTimeouts()
+        ttsService.cancel()
+        this.executeMatch(parsed.extractedName)
+      }
+      return
+    }
+
+    // Scenario B: Currently in LISTENING_FOR_OBJECT state (wake word was previously detected)
     if (this.state === 'LISTENING_FOR_OBJECT') {
       const candidateName = parsed.extractedName || transcript
       if (candidateName && candidateName.length >= 2) {
@@ -148,28 +174,7 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
       return
     }
 
-    // Scenario B: Transcript has wake phrase ("Hey Zumi" or "Hey Zumi, show Apple")
-    if (parsed.hasWakePhrase) {
-      if (parsed.isWakeOnly || !parsed.extractedName) {
-        // Child just said "Hey Zumi"
-        this.setState('LISTENING_FOR_OBJECT', 'Listening for object...')
-
-        // Set a 6 second timeout to return to LISTENING if child doesn't say object name
-        this.clearTimeouts()
-        this.activeWakeTimeout = setTimeout(() => {
-          if (this.state === 'LISTENING_FOR_OBJECT') {
-            this.setState('LISTENING', 'Zumi is listening')
-          }
-        }, 6000)
-      } else {
-        // Child said full command in one phrase: "Hey Zumi, show Apple"
-        this.executeMatch(parsed.extractedName)
-      }
-      return
-    }
-
-    // Scenario C: If user is actively typing or child says single object directly when listening
-    // We only trigger if it's final or high-confidence match
+    // Scenario C: If single object name is spoken directly with high-confidence match
     if (isFinal && parsed.extractedName && this.state === 'LISTENING') {
       const quickMatch = this.matchObject(parsed.extractedName)
       if (quickMatch.status === 'exact') {
@@ -181,7 +186,7 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
   /**
    * Executes in-memory matching and triggers immediate object display & speech.
    */
-  private async executeMatch(query: string): Promise<void> {
+  private executeMatch(query: string): void {
     this.clearTimeouts()
     this.setState('MATCHING', `Finding ${query}...`)
 
@@ -194,36 +199,28 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
       // Immediately notify listeners to display the image!
       this.commandListeners.forEach((cb) => cb(query, result))
 
-      // Speak object name if autoSpeak is enabled
+      // Speak object name non-blockingly with autoSpeak
       if (this.autoSpeak && object) {
-        try {
-          await ttsService.speak(object.name)
-        } catch {
-          // ignore TTS errors
-        }
+        ttsService.speak(object.name).catch(() => {})
       }
 
-      // Return smoothly to listening after brief pause
-      this.scheduleReturnToListening(2500)
+      // Return smoothly to listening and restart recognition for consecutive commands
+      this.scheduleReturnToListening(1200)
     } else if (result.status === 'ambiguous') {
       // Ambiguous matches -> show "Did you mean?" suggestions
       this.commandListeners.forEach((cb) => cb(query, result))
       this.setState('LISTENING_FOR_OBJECT', `Did you mean ${query}?`)
-      this.scheduleReturnToListening(5000)
+      this.scheduleReturnToListening(4000)
     } else {
       // No match found
       this.setState('NO_MATCH', `Couldn't find "${query}"`)
       this.commandListeners.forEach((cb) => cb(query, result))
 
       if (this.autoSpeak) {
-        try {
-          await ttsService.speak("I couldn't find that object")
-        } catch {
-          // ignore
-        }
+        ttsService.speak("I couldn't find that object").catch(() => {})
       }
 
-      this.scheduleReturnToListening(2000)
+      this.scheduleReturnToListening(1500)
     }
   }
 
@@ -232,6 +229,8 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
     this.resetToListeningTimeout = setTimeout(() => {
       if (this.alwaysListening) {
         this.setState('LISTENING', 'Zumi is listening')
+        // Clean session restart guarantees subsequent speech recognition commands respond cleanly
+        speechRecognitionService.restart()
       } else {
         this.setState('IDLE', 'Assistant idle')
       }

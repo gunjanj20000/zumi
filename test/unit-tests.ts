@@ -80,6 +80,19 @@ assert.equal(p.extractedName, 'apple')
 p = parseVoiceCommand('Hey Zumi, Zumi')
 assert.equal(p.extractedName, '')
 
+// Consecutive/accumulated commands in continuous stream
+p = parseVoiceCommand('Hey Zumi show Apple Hey Zumi show Chocolate')
+assert.equal(p.hasWakePhrase, true)
+assert.equal(p.extractedName, 'chocolate')
+
+p = parseVoiceCommand('Hey Zumi show Apple Hey Zumi show Milk')
+assert.equal(p.hasWakePhrase, true)
+assert.equal(p.extractedName, 'milk')
+
+p = parseVoiceCommand('Hey Zumi show Apple Hey Zumi')
+assert.equal(p.hasWakePhrase, true)
+assert.equal(p.isWakeOnly, true)
+
 console.log('✔ Command Parser tests passed')
 
 // 4. Test In-Memory Object Matcher
