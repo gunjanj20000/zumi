@@ -21,7 +21,7 @@ export const db = new ObjectSpeakerDatabase()
 
 export const DEFAULT_SETTINGS: AppSettings = {
   id: 1,
-  voiceAssistantEnabled: true,
+  voiceAssistantEnabled: false,
   alwaysListening: true,
   wakePhrase: 'Hey Zumi',
   recognitionLanguage: 'en-US',
