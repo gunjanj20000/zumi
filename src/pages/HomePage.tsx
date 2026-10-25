@@ -15,12 +15,14 @@ interface HomePageProps {
   objects: ObjectCard[]
   settings: AppSettings
   onLoadStarterPack: () => Promise<any>
+  onUpdateSettings?: (settings: Partial<AppSettings>) => Promise<void>
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   objects,
   settings,
   onLoadStarterPack,
+  onUpdateSettings,
 }) => {
   const [typedQuery, setTypedQuery] = useState('')
   const [selectedObject, setSelectedObject] = useState<ObjectCard | null>(null)
@@ -104,6 +106,15 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   }
 
+  const handleToggleVoiceAssistant = useCallback(async () => {
+    if (!onUpdateSettings) return
+    const nextState = !settings.voiceAssistantEnabled
+    await onUpdateSettings({
+      voiceAssistantEnabled: nextState,
+      alwaysListening: nextState ? true : settings.alwaysListening,
+    })
+  }, [onUpdateSettings, settings.voiceAssistantEnabled, settings.alwaysListening])
+
   return (
     <div className="min-h-screen flex flex-col justify-between p-3 sm:p-5 md:p-6 lg:p-8 max-w-5xl mx-auto w-full">
       {/* Top Header */}
@@ -132,6 +143,8 @@ export const HomePage: React.FC<HomePageProps> = ({
             errorMessage={voiceError}
             isSupported={isVoiceSupported}
             onRestart={restartListening}
+            voiceAssistantEnabled={settings.voiceAssistantEnabled}
+            onToggleVoiceAssistant={handleToggleVoiceAssistant}
           />
 
           <Link

@@ -73,6 +73,7 @@ export function App() {
                 objects={objects}
                 settings={settings}
                 onLoadStarterPack={seedStarterObjects}
+                onUpdateSettings={handleUpdateSettings}
               />
             }
           />
