@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import type { ObjectCard, ImageFitMode } from '../types/types'
 import { ObjectThumbnail } from './ObjectThumbnail'
-import { Volume2, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 interface ObjectDisplayProps {
@@ -64,45 +64,22 @@ export const ObjectDisplay: React.FC<ObjectDisplayProps> = ({
       {/* Main Responsive Card */}
       <div className="w-full bg-white rounded-3xl sm:rounded-[36px] p-4 sm:p-6 md:p-8 shadow-xl shadow-rose-950/5 border-2 border-rose-100 flex flex-col items-center transition-all duration-300">
         
-        {/* Large Image Box */}
-        <div className="relative w-full aspect-square max-h-[50vh] sm:max-h-[55vh] lg:max-h-[60vh] bg-gradient-to-b from-amber-50/50 to-rose-50/30 rounded-2xl sm:rounded-3xl p-3 sm:p-6 flex items-center justify-center overflow-hidden border border-rose-100/60 shadow-inner group">
+        {/* Large Image Box (tap to speak / play recorded audio) */}
+        <button
+          type="button"
+          onClick={onReplaySpeak}
+          aria-label={`Play audio for ${object.name}`}
+          className={`relative w-full aspect-square max-h-[50vh] sm:max-h-[55vh] lg:max-h-[60vh] bg-gradient-to-b from-amber-50/50 to-rose-50/30 rounded-2xl sm:rounded-3xl p-3 sm:p-6 flex items-center justify-center overflow-hidden border border-rose-100/60 shadow-inner group cursor-pointer transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-rose-400 select-none ${
+            isSpeaking ? 'ring-4 ring-rose-400/80 shadow-rose-200' : ''
+          }`}
+        >
           <ObjectThumbnail
             blob={object.imageBlob}
             alt={object.name}
             fit={imageFit}
-            className="w-full h-full drop-shadow-md group-hover:scale-[1.02] transition-transform duration-300"
+            className="w-full h-full drop-shadow-md group-hover:scale-[1.02] transition-transform duration-300 pointer-events-none"
           />
-
-          {/* Custom audio badge */}
-          {object.audioBlob && (
-            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-sm text-xs font-bold text-emerald-700 shadow-sm flex items-center gap-1 border border-emerald-200">
-              <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Voice Recording</span>
-            </div>
-          )}
-
-          {/* Replay Speaker Button floating in image bottom corner */}
-          <button
-            type="button"
-            onClick={onReplaySpeak}
-            aria-label={`Pronounce ${object.name}`}
-            className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white shadow-lg hover:shadow-rose-300/50 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
-          >
-            {isSpeaking ? (
-              <div className="flex items-center gap-1 h-6">
-                <span className="w-1 bg-white rounded-full wave-bar-1"></span>
-                <span className="w-1 bg-white rounded-full wave-bar-2"></span>
-                <span className="w-1 bg-white rounded-full wave-bar-3"></span>
-                <span className="w-1 bg-white rounded-full wave-bar-4"></span>
-              </div>
-            ) : (
-              <Volume2 className="w-6 h-6 sm:w-7 sm:h-7" />
-            )}
-            <span className="font-extrabold text-sm sm:text-base hidden sm:inline pr-1">
-              {object.audioBlob ? 'Play Audio' : 'Speak'}
-            </span>
-          </button>
-        </div>
+        </button>
 
         {/* Object Name Section */}
         <div className="mt-5 sm:mt-7 text-center flex flex-col items-center">
