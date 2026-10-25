@@ -199,9 +199,9 @@ export class BrowserVoiceAssistantService implements VoiceAssistantService {
       // Immediately notify listeners to display the image!
       this.commandListeners.forEach((cb) => cb(query, result))
 
-      // Speak object name non-blockingly with autoSpeak
+      // Speak object name or play custom recorded audio with autoSpeak
       if (this.autoSpeak && object) {
-        ttsService.speak(object.name).catch(() => {})
+        ttsService.playObjectAudioOrSpeak(object).catch(() => {})
       }
 
       // Return smoothly to listening and restart recognition for consecutive commands

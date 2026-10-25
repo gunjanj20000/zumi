@@ -7,6 +7,8 @@ export interface ObjectCard {
   secondLanguageName?: string
   imageBlob: Blob
   mimeType: string
+  audioBlob?: Blob
+  audioMimeType?: string
   createdAt: number
   updatedAt: number
 }

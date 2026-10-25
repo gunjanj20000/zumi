@@ -29,7 +29,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [disambiguationChoices, setDisambiguationChoices] = useState<ObjectCard[] | null>(null)
   const [isSeeding, setIsSeeding] = useState(false)
 
-  const { speak, isSpeaking } = useTextToSpeech(settings.ttsLanguage || 'en-US')
+  const { playObjectAudio, isSpeaking } = useTextToSpeech(settings.ttsLanguage || 'en-US')
 
   // Instant in-memory typed suggestions
   const suggestions = useMemo(() => {
@@ -46,13 +46,13 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       if (settings.autoSpeak && shouldSpeak) {
         try {
-          await speak(obj.name, settings.ttsLanguage)
+          await playObjectAudio(obj, settings.ttsLanguage)
         } catch {
           // ignore
         }
       }
     },
-    [settings.autoSpeak, settings.ttsLanguage, speak]
+    [settings.autoSpeak, settings.ttsLanguage, playObjectAudio]
   )
 
   // Voice Assistant callback
@@ -240,7 +240,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             isSpeaking={isSpeaking}
             onReplaySpeak={() => {
               if (selectedObject) {
-                speak(selectedObject.name, settings.ttsLanguage)
+                playObjectAudio(selectedObject, settings.ttsLanguage)
               }
             }}
           />

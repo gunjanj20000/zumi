@@ -1,22 +1,84 @@
-import React from 'react'
-import type { AppSettings } from '../types/types'
+import React, { useState, useRef } from 'react'
+import type { AppSettings, ObjectCard } from '../types/types'
+import { exportBackup, importBackup } from '../services/backup'
 import {
   Mic,
   ShieldCheck,
   Smartphone,
   Eye,
   Check,
+  Download,
+  Upload,
+  Database,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react'
 
 interface SettingsPanelProps {
   settings: AppSettings
   onUpdate: (partial: Partial<AppSettings>) => Promise<void>
+  objects?: ObjectCard[]
+  onRefreshObjects?: () => Promise<void>
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   onUpdate,
+  objects = [],
+  onRefreshObjects,
 }) => {
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true)
+      setStatusMessage(null)
+      const res = await exportBackup(objects, settings)
+      setStatusMessage({
+        type: 'success',
+        text: `Exported ${res.objectCount} object${res.objectCount === 1 ? '' : 's'} and app preferences to backup file!`,
+      })
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Export failed: ${err?.message || 'Unknown error'}`,
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setIsImporting(true)
+      setStatusMessage(null)
+      const res = await importBackup(file)
+      if (onRefreshObjects) {
+        await onRefreshObjects()
+      }
+      const total = res.objectsImported + res.objectsUpdated
+      setStatusMessage({
+        type: 'success',
+        text: `Successfully imported ${total} object${total === 1 ? '' : 's'}${
+          res.appName ? ` from ${res.appName}` : ''
+        } (${res.hasImageCount} photos, ${res.hasAudioCount} audio clips)!`,
+      })
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Import failed: ${err?.message || 'Invalid or corrupted backup file'}`,
+      })
+    } finally {
+      setIsImporting(false)
+      if (e.target) e.target.value = ''
+    }
+  }
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       {/* Voice Assistant Section */}
@@ -221,6 +283,104 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Backup & Data Portability (Export / Import) */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border-2 border-rose-100">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-rose-50">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-800">Backup &amp; Data Portability</h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Export and import your custom objects, images, audio recordings, and preferences
+            </p>
+          </div>
+        </div>
+
+        {/* Feedback notification message */}
+        {statusMessage && (
+          <div
+            className={`mb-5 p-3.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center gap-2 ${
+              statusMessage.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`}
+          >
+            {statusMessage.type === 'success' ? (
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Export Button */}
+          <div className="p-4 rounded-2xl border-2 border-slate-100 bg-slate-50/60 flex flex-col justify-between gap-3">
+            <div>
+              <div className="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                <Download className="w-4 h-4 text-indigo-600" /> Export Backup
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Download a JSON backup of your entire library ({objects.length} object{objects.length === 1 ? '' : 's'}), custom audio clips, and preferences to keep safe or move to another device.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={isExporting || isImporting}
+              onClick={handleExport}
+              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Exporting…
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" /> Export All Data
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Import Button */}
+          <div className="p-4 rounded-2xl border-2 border-slate-100 bg-slate-50/60 flex flex-col justify-between gap-3">
+            <div>
+              <div className="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                <Upload className="w-4 h-4 text-rose-600" /> Import Backup
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Restore objects and preferences from a previously exported <code className="bg-slate-200 px-1 py-0.5 rounded text-[11px]">.json</code> backup file.
+              </p>
+            </div>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <button
+              type="button"
+              disabled={isExporting || isImporting}
+              onClick={() => importFileInputRef.current?.click()}
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-rose-50 text-slate-800 hover:text-rose-700 font-extrabold text-xs sm:text-sm border-2 border-slate-200 hover:border-rose-300 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Importing…
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" /> Import Backup File
+                </>
+              )}
+            </button>
           </div>
         </div>
       </section>

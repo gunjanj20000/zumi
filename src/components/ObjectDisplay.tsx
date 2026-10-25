@@ -73,6 +73,14 @@ export const ObjectDisplay: React.FC<ObjectDisplayProps> = ({
             className="w-full h-full drop-shadow-md group-hover:scale-[1.02] transition-transform duration-300"
           />
 
+          {/* Custom audio badge */}
+          {object.audioBlob && (
+            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-sm text-xs font-bold text-emerald-700 shadow-sm flex items-center gap-1 border border-emerald-200">
+              <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Voice Recording</span>
+            </div>
+          )}
+
           {/* Replay Speaker Button floating in image bottom corner */}
           <button
             type="button"
@@ -91,7 +99,7 @@ export const ObjectDisplay: React.FC<ObjectDisplayProps> = ({
               <Volume2 className="w-6 h-6 sm:w-7 sm:h-7" />
             )}
             <span className="font-extrabold text-sm sm:text-base hidden sm:inline pr-1">
-              Speak
+              {object.audioBlob ? 'Play Audio' : 'Speak'}
             </span>
           </button>
         </div>

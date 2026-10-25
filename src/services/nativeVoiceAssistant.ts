@@ -201,9 +201,9 @@ export class NativeAndroidVoiceAssistantService implements VoiceAssistantService
       // Immediately notify listeners to display the image!
       this.commandListeners.forEach((cb) => cb(effectiveQuery, result))
 
-      // Speak object name locally with autoSpeak
+      // Speak object name or play custom recorded audio with autoSpeak
       if (this.autoSpeak && object) {
-        ttsService.speak(object.name).catch(() => {})
+        ttsService.playObjectAudioOrSpeak(object).catch(() => {})
       }
 
       this.scheduleReturnToListening(1200)

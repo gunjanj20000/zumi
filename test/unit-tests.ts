@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { normalizeText, levenshteinDistance, calculateSimilarity } from '../src/utils/normalization.ts'
 import { parseVoiceCommand } from '../src/utils/commandParser.ts'
 import { ObjectMatcher } from '../src/services/objectMatcher.ts'
+import { blobToBase64, dataUrlToBlob } from '../src/services/backup.ts'
+import { parseAnyWordPack } from '../src/services/universalWordPack.ts'
 
 console.log('--- Running Object Speaker / Zumi Unit Tests ---')
 
@@ -180,4 +182,78 @@ m = matcher.matchObject('helicopter airplane spacecraft')
 assert.equal(m.status, 'none')
 
 console.log('✔ Object Matcher & child pronunciation tests passed')
+
+// 5. Test Backup Serialization & Audio Support
+console.log('Testing backup serialization & audio blob support...')
+const testAudioBlob = new Blob(['test-audio-recording-bytes'], { type: 'audio/webm' })
+const base64Audio = await blobToBase64(testAudioBlob)
+assert.ok(base64Audio.startsWith('data:audio/webm;base64,'))
+
+const restoredAudioBlob = dataUrlToBlob(base64Audio)
+assert.equal(restoredAudioBlob.type, 'audio/webm')
+assert.equal(restoredAudioBlob.size, testAudioBlob.size)
+const restoredAudioText = await restoredAudioBlob.text()
+assert.equal(restoredAudioText, 'test-audio-recording-bytes')
+console.log('✔ Backup serialization & audio blob tests passed')
+
+// 6. Test CogniCard & WordLearn Backup Compatibility
+console.log('Testing CogniCard & WordLearn backup compatibility...')
+const cognicardPayload = JSON.stringify({
+  appName: 'CogniCard',
+  version: 2,
+  categories: [{ id: 1, name: 'Fruits', icon: '🍎' }],
+  flashcards: [
+    {
+      id: 1,
+      categoryId: 1,
+      englishWord: 'Apple',
+      hindiWord: 'सेब',
+      imageBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      englishAudioBase64: 'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhAAA',
+    },
+    {
+      id: 2,
+      categoryId: 1,
+      englishWord: 'Banana',
+      hindiWord: 'केला',
+      imageBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    },
+  ],
+})
+
+const parsedCognicard = parseAnyWordPack(cognicardPayload)
+assert.equal(parsedCognicard.words.length, 2)
+assert.equal(parsedCognicard.words[0].englishWord, 'Apple')
+assert.equal(parsedCognicard.words[0].hindiWord, 'सेब')
+assert.ok(parsedCognicard.words[0].audioDataUrl)
+assert.equal(parsedCognicard.words[1].englishWord, 'Banana')
+assert.equal(parsedCognicard.words[1].hindiWord, 'केला')
+
+const wordlearnPayload = JSON.stringify({
+  appName: 'Word Learning App',
+  version: 2,
+  categories: [{ id: 'animals', name: 'Animals', color: '#9333EA' }],
+  words: [
+    {
+      id: 'w_dog_1',
+      word: 'dog',
+      text: 'DOG',
+      englishWord: 'Dog',
+      hindiWord: 'कुत्ता',
+      category: 'Animals',
+      imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      audioDataUrl: 'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhAAA',
+    },
+  ],
+})
+
+const parsedWordlearn = parseAnyWordPack(wordlearnPayload)
+assert.equal(parsedWordlearn.words.length, 1)
+assert.equal(parsedWordlearn.words[0].word, 'dog')
+assert.equal(parsedWordlearn.words[0].englishWord, 'Dog')
+assert.equal(parsedWordlearn.words[0].hindiWord, 'कुत्ता')
+assert.ok(parsedWordlearn.words[0].imageDataUrl)
+assert.ok(parsedWordlearn.words[0].audioDataUrl)
+console.log('✔ CogniCard & WordLearn backup compatibility tests passed')
+
 console.log('🎉 ALL TESTS PASSED SUCCESSFULLY!')

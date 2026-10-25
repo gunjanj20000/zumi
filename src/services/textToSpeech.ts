@@ -9,6 +9,7 @@ export class TextToSpeechService {
   private voicesLoaded = false
   // Retain active utterance reference to prevent V8 garbage-collecting it mid-speech
   private activeUtterance: SpeechSynthesisUtterance | null = null
+  private activeAudio: HTMLAudioElement | null = null
 
   constructor() {
     this.initVoices()
@@ -60,9 +61,19 @@ export class TextToSpeechService {
   }
 
   /**
-   * Cancels any currently playing speech.
+   * Cancels any currently playing speech or custom audio.
    */
   public cancel(): void {
+    if (this.activeAudio) {
+      try {
+        this.activeAudio.pause()
+        this.activeAudio.src = ''
+      } catch {
+        // ignore
+      }
+      this.activeAudio = null
+    }
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel()
@@ -72,6 +83,68 @@ export class TextToSpeechService {
     }
     this.activeUtterance = null
     this.isSpeaking = false
+  }
+
+  /**
+   * Plays a custom audio Blob (e.g. parent recording or sound clip).
+   */
+  public async playAudio(blob: Blob): Promise<void> {
+    if (typeof window === 'undefined') return Promise.resolve()
+
+    this.cancel()
+
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        this.activeAudio = audio
+        this.isSpeaking = true
+
+        let finished = false
+        let safetyTimer: any = null
+
+        const cleanup = () => {
+          if (finished) return
+          finished = true
+          if (safetyTimer) clearTimeout(safetyTimer)
+          this.isSpeaking = false
+          if (this.activeAudio === audio) {
+            this.activeAudio = null
+          }
+          try {
+            URL.revokeObjectURL(url)
+          } catch {
+            // ignore
+          }
+          resolve()
+        }
+
+        safetyTimer = setTimeout(cleanup, 15000)
+
+        audio.onended = () => cleanup()
+        audio.onerror = () => cleanup()
+
+        audio.play().catch(() => {
+          cleanup()
+        })
+      } catch {
+        this.isSpeaking = false
+        resolve()
+      }
+    })
+  }
+
+  /**
+   * Plays custom audio if available on the object, otherwise speaks object name via TTS.
+   */
+  public async playObjectAudioOrSpeak(
+    object: { name: string; audioBlob?: Blob },
+    lang = 'en-US'
+  ): Promise<void> {
+    if (object.audioBlob) {
+      return this.playAudio(object.audioBlob)
+    }
+    return this.speak(object.name, lang)
   }
 
   /**

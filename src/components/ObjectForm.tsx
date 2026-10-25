@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import type { ObjectCard } from '../types/types'
 import { processAndCompressImage, createImageUrl, revokeImageUrl } from '../services/imageProcessing'
-import { Camera, Image as ImageIcon, Plus, X, Upload, Check } from 'lucide-react'
+import { Camera, Image as ImageIcon, Plus, X, Upload, Check, Mic, Play, Square, Trash2, Volume2 } from 'lucide-react'
 
 interface ObjectFormProps {
   initialData?: ObjectCard | null
@@ -21,11 +21,37 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
   const [imageBlob, setImageBlob] = useState<Blob | null>(initialData?.imageBlob || null)
   const [mimeType, setMimeType] = useState(initialData?.mimeType || 'image/webp')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(initialData?.audioBlob || null)
+  const [audioMimeType, setAudioMimeType] = useState(initialData?.audioMimeType || 'audio/webm')
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
+  const recordTimerRef = useRef<any>(null)
+
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop()
+        } catch {
+          // ignore
+        }
+      }
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (imageBlob) {
@@ -38,6 +64,121 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
       setPreviewUrl(null)
     }
   }, [imageBlob])
+
+  const startRecording = async () => {
+    setError(null)
+    if (isPlayingAudio && audioPlayerRef.current) {
+      audioPlayerRef.current.pause()
+      setIsPlayingAudio(false)
+    }
+
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setError('Voice recording is not supported on this browser.')
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      let preferredMime = 'audio/webm'
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          preferredMime = 'audio/webm;codecs=opus'
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          preferredMime = 'audio/webm'
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          preferredMime = 'audio/mp4'
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          preferredMime = 'audio/ogg'
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, preferredMime ? { mimeType: preferredMime } : undefined)
+      mediaRecorderRef.current = recorder
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const finalMime = recorder.mimeType || preferredMime || 'audio/webm'
+        const blob = new Blob(audioChunksRef.current, { type: finalMime })
+        setAudioBlob(blob)
+        setAudioMimeType(finalMime)
+        stream.getTracks().forEach((track) => track.stop())
+        if (recordTimerRef.current) {
+          clearInterval(recordTimerRef.current)
+          recordTimerRef.current = null
+        }
+        setIsRecordingAudio(false)
+        setRecordingSeconds(0)
+      }
+
+      recorder.start(250)
+      setIsRecordingAudio(true)
+      setRecordingSeconds(0)
+
+      recordTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          if (prev >= 15) {
+            stopRecording()
+            return 15
+          }
+          return prev + 1
+        })
+      }, 1000)
+    } catch (err: any) {
+      setError('Unable to access microphone: ' + (err?.message || 'Permission denied'))
+      setIsRecordingAudio(false)
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+  }
+
+  const handleAudioFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAudioBlob(file)
+    setAudioMimeType(file.type || 'audio/mpeg')
+    if (e.target) e.target.value = ''
+  }
+
+  const togglePlayAudio = () => {
+    if (!audioBlob) return
+    if (isPlayingAudio && audioPlayerRef.current) {
+      audioPlayerRef.current.pause()
+      setIsPlayingAudio(false)
+      return
+    }
+
+    try {
+      const url = URL.createObjectURL(audioBlob)
+      const audio = new Audio(url)
+      audioPlayerRef.current = audio
+      setIsPlayingAudio(true)
+
+      const cleanup = () => {
+        setIsPlayingAudio(false)
+        try {
+          URL.revokeObjectURL(url)
+        } catch {
+          // ignore
+        }
+      }
+
+      audio.onended = cleanup
+      audio.onerror = cleanup
+      audio.play().catch(cleanup)
+    } catch {
+      setIsPlayingAudio(false)
+    }
+  }
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -94,6 +235,8 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
         secondLanguageName: secondLanguageName.trim() || undefined,
         imageBlob,
         mimeType,
+        audioBlob: audioBlob || undefined,
+        audioMimeType: audioBlob ? audioMimeType : undefined,
         createdAt: initialData?.createdAt || Date.now(),
         updatedAt: Date.now(),
       })
@@ -280,6 +423,124 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
                 </div>
                 <span className="text-sm font-extrabold text-amber-800">Upload Image</span>
                 <span className="text-xs text-amber-500 font-medium">Choose File</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Voice / Audio Recording (Optional) */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-extrabold text-slate-700">
+              Voice / Audio Recording <span className="text-xs font-normal text-slate-400">(Optional)</span>
+            </label>
+            {audioBlob && (
+              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" /> Audio Attached
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mb-2.5">
+            Record or upload custom pronunciation audio. When empty, Zumi speaks using speech synthesis.
+          </p>
+
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={handleAudioFileSelected}
+          />
+
+          {audioBlob ? (
+            <div className="p-3.5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={togglePlayAudio}
+                  className="w-11 h-11 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-200 transition-all cursor-pointer shrink-0 active:scale-95"
+                  title={isPlayingAudio ? 'Stop Preview' : 'Play Audio'}
+                >
+                  {isPlayingAudio ? (
+                    <Square className="w-5 h-5 fill-current" />
+                  ) : (
+                    <Play className="w-5 h-5 fill-current ml-0.5" />
+                  )}
+                </button>
+                <div className="overflow-hidden">
+                  <div className="font-extrabold text-sm text-emerald-950 truncate flex items-center gap-1.5">
+                    <Volume2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{isPlayingAudio ? 'Playing Custom Audio…' : 'Custom Audio Attached'}</span>
+                  </div>
+                  <div className="text-xs text-emerald-700 font-medium">
+                    Tap play to listen, or replace / remove
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="py-1.5 px-3 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 shadow-2xs cursor-pointer transition-colors"
+                >
+                  Replace File
+                </button>
+                <button
+                  type="button"
+                  onClick={startRecording}
+                  className="py-1.5 px-3 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 shadow-2xs cursor-pointer transition-colors"
+                >
+                  Re-record
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (audioPlayerRef.current) audioPlayerRef.current.pause()
+                    setIsPlayingAudio(false)
+                    setAudioBlob(null)
+                  }}
+                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer"
+                  title="Remove Audio"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : isRecordingAudio ? (
+            <div className="p-4 rounded-2xl border-2 border-rose-300 bg-rose-50 flex items-center justify-between gap-3 animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3.5 h-3.5 rounded-full bg-rose-500 animate-ping"></span>
+                <span className="text-sm font-extrabold text-rose-800">
+                  Recording Voice… ({recordingSeconds}s / 15s)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="py-1.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>Stop &amp; Save</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={startRecording}
+                className="py-3 px-3 rounded-2xl border-2 border-dashed border-rose-200 hover:border-rose-400 bg-rose-50/40 hover:bg-rose-50 transition-colors flex items-center justify-center gap-2 cursor-pointer font-bold text-xs sm:text-sm text-rose-700"
+              >
+                <Mic className="w-4 h-4 text-rose-500" />
+                <span>Record Voice</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => audioInputRef.current?.click()}
+                className="py-3 px-3 rounded-2xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 cursor-pointer font-bold text-xs sm:text-sm text-indigo-700"
+              >
+                <Upload className="w-4 h-4 text-indigo-500" />
+                <span>Upload Audio</span>
               </button>
             </div>
           )}

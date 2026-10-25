@@ -17,6 +17,7 @@ export function App() {
     updateObject,
     removeObject,
     seedStarterObjects,
+    refreshObjects,
   } = useObjects()
 
   // Load app settings from IndexedDB
@@ -88,6 +89,7 @@ export function App() {
                 onDeleteObject={removeObject}
                 onUpdateSettings={handleUpdateSettings}
                 onLoadStarterPack={seedStarterObjects}
+                onRefreshObjects={refreshObjects}
               />
             }
           />

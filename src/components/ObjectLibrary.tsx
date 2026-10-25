@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import type { ObjectCard } from '../types/types'
 import { ObjectThumbnail } from './ObjectThumbnail'
-import { Plus, Search, Trash2, Edit3, Sparkles, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, Sparkles, AlertTriangle, Volume2 } from 'lucide-react'
 
 interface ObjectLibraryProps {
   objects: ObjectCard[]
@@ -150,6 +150,15 @@ export const ObjectLibrary: React.FC<ObjectLibraryProps> = ({
                 {item.alternateNames && item.alternateNames.length > 0 && (
                   <div className="text-[11px] font-semibold text-slate-400 text-center mt-1">
                     {item.alternateNames.length} alternate name{item.alternateNames.length > 1 ? 's' : ''}
+                  </div>
+                )}
+
+                {/* Custom Audio Badge */}
+                {item.audioBlob && (
+                  <div className="flex justify-center mt-1.5">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-extrabold border border-emerald-200 shadow-2xs">
+                      <Volume2 className="w-3 h-3 text-emerald-600" /> Custom Audio
+                    </span>
                   </div>
                 )}
               </div>

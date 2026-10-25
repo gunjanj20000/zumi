@@ -14,6 +14,7 @@ interface SettingsPageProps {
   onDeleteObject: (id: string) => Promise<void>
   onUpdateSettings: (partial: Partial<AppSettings>) => Promise<void>
   onLoadStarterPack: () => Promise<any>
+  onRefreshObjects?: () => Promise<void>
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -24,6 +25,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onDeleteObject,
   onUpdateSettings,
   onLoadStarterPack,
+  onRefreshObjects,
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'config'>('library')
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -140,7 +142,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           onLoadStarterPack={onLoadStarterPack}
         />
       ) : (
-        <SettingsPanel settings={settings} onUpdate={onUpdateSettings} />
+        <SettingsPanel
+          settings={settings}
+          onUpdate={onUpdateSettings}
+          objects={objects}
+          onRefreshObjects={onRefreshObjects}
+        />
       )}
     </div>
   )

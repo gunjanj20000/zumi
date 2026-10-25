@@ -24,6 +24,18 @@ export function useTextToSpeech(defaultLang = 'en-US') {
     [defaultLang]
   )
 
+  const playObjectAudio = useCallback(
+    async (object: { name: string; audioBlob?: Blob }, lang = defaultLang) => {
+      setIsSpeaking(true)
+      try {
+        await ttsService.playObjectAudioOrSpeak(object, lang)
+      } finally {
+        setIsSpeaking(false)
+      }
+    },
+    [defaultLang]
+  )
+
   const stop = useCallback(() => {
     ttsService.cancel()
     setIsSpeaking(false)
@@ -31,6 +43,7 @@ export function useTextToSpeech(defaultLang = 'en-US') {
 
   return {
     speak,
+    playObjectAudio,
     stop,
     isSpeaking,
   }
