@@ -25,7 +25,7 @@ export function useTextToSpeech(defaultLang = 'en-US') {
   )
 
   const playObjectAudio = useCallback(
-    async (object: { name: string; audioBlob?: Blob }, lang = defaultLang) => {
+    async (object: { name: string; audioBlob?: Blob; audioDataUrl?: string }, lang = defaultLang) => {
       setIsSpeaking(true)
       try {
         await ttsService.playObjectAudioOrSpeak(object, lang)

@@ -86,16 +86,17 @@ export class TextToSpeechService {
   }
 
   /**
-   * Plays a custom audio Blob (e.g. parent recording or sound clip).
+   * Plays a custom audio Blob or data URL string (e.g. parent recording or sound clip).
    */
-  public async playAudio(blob: Blob): Promise<void> {
+  public async playAudio(blobOrUrl: Blob | string): Promise<void> {
     if (typeof window === 'undefined') return Promise.resolve()
 
     this.cancel()
 
     return new Promise((resolve) => {
       try {
-        const url = URL.createObjectURL(blob)
+        const isBlob = blobOrUrl instanceof Blob
+        const url = isBlob ? URL.createObjectURL(blobOrUrl) : String(blobOrUrl)
         const audio = new Audio(url)
         this.activeAudio = audio
         this.isSpeaking = true
@@ -111,10 +112,12 @@ export class TextToSpeechService {
           if (this.activeAudio === audio) {
             this.activeAudio = null
           }
-          try {
-            URL.revokeObjectURL(url)
-          } catch {
-            // ignore
+          if (isBlob) {
+            try {
+              URL.revokeObjectURL(url)
+            } catch {
+              // ignore
+            }
           }
           resolve()
         }
@@ -138,10 +141,13 @@ export class TextToSpeechService {
    * Plays custom audio if available on the object, otherwise speaks object name via TTS.
    */
   public async playObjectAudioOrSpeak(
-    object: { name: string; audioBlob?: Blob },
+    object: { name: string; audioBlob?: Blob; audioDataUrl?: string },
     lang = 'en-US'
   ): Promise<void> {
-    if (object.audioBlob) {
+    if (object.audioDataUrl && object.audioDataUrl.length > 20) {
+      return this.playAudio(object.audioDataUrl)
+    }
+    if (object.audioBlob && (object.audioBlob instanceof Blob || typeof (object.audioBlob as any).slice === 'function') && (object.audioBlob as any).size > 0) {
       return this.playAudio(object.audioBlob)
     }
     return this.speak(object.name, lang)

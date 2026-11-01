@@ -75,6 +75,7 @@ export const ObjectDisplay: React.FC<ObjectDisplayProps> = ({
         >
           <ObjectThumbnail
             blob={object.imageBlob}
+            imageDataUrl={object.imageDataUrl}
             alt={object.name}
             fit={imageFit}
             className="w-full h-full drop-shadow-md group-hover:scale-[1.02] transition-transform duration-300 pointer-events-none"

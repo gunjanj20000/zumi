@@ -131,7 +131,7 @@ export const ObjectLibrary: React.FC<ObjectLibraryProps> = ({
               <div>
                 {/* Thumbnail */}
                 <div className="w-full aspect-square bg-amber-50/50 rounded-2xl overflow-hidden border border-amber-100/60 p-2 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
-                  <ObjectThumbnail blob={item.imageBlob} alt={item.name} />
+                  <ObjectThumbnail blob={item.imageBlob} imageDataUrl={item.imageDataUrl} alt={item.name} />
                 </div>
 
                 {/* Name */}

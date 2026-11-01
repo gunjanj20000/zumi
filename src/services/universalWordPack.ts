@@ -124,23 +124,34 @@ export function normalizeImageDataUrl(str: unknown): string | undefined {
   if (!trimmed) return undefined
 
   if (trimmed.startsWith('data:image/')) {
-    return trimmed
+    const commaIdx = trimmed.indexOf(',')
+    // Reject empty data URLs like "data:image/png;base64,"
+    if (commaIdx !== -1 && trimmed.substring(commaIdx + 1).trim().length > 5) {
+      return trimmed
+    }
+    return undefined
   }
 
-  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml')) {
+  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml') || trimmed.includes('<svg')) {
     return `data:image/svg+xml;utf8,${encodeURIComponent(trimmed)}`
   }
 
   if (trimmed.startsWith('data:')) {
     if (trimmed.includes(';base64,')) {
       const base64Part = trimmed.substring(trimmed.indexOf(';base64,') + 8).replace(/\s+/g, '')
-      return `data:image/png;base64,${base64Part}`
+      if (base64Part.length > 5) {
+        return `data:image/png;base64,${base64Part}`
+      }
     }
   }
 
   if (/^[A-Za-z0-9+/=_\-\s]+$/.test(trimmed) && trimmed.length > 50) {
     const cleanBase64 = trimmed.replace(/\s+/g, '')
     return `data:image/png;base64,${cleanBase64}`
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
   }
 
   return undefined
@@ -155,20 +166,29 @@ export function dataUrlToBlob(dataUrlOrBase64: string, defaultMime: string = 'ap
   if (matches) {
     const mime = matches[1]
     const base64Data = matches[2].replace(/\s+/g, '')
-    const byteString = atob(base64Data)
-    const arrayBuffer = new ArrayBuffer(byteString.length)
-    const uint8Array = new Uint8Array(arrayBuffer)
-    for (let i = 0; i < byteString.length; i++) {
-      uint8Array[i] = byteString.charCodeAt(i)
+    try {
+      const byteString = atob(base64Data)
+      const arrayBuffer = new ArrayBuffer(byteString.length)
+      const uint8Array = new Uint8Array(arrayBuffer)
+      for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i)
+      }
+      return new Blob([uint8Array], { type: mime })
+    } catch {
+      // Fallback if base64 decoding fails
     }
-    return new Blob([uint8Array], { type: mime })
   }
 
-  // SVG data URL
+  // SVG data URL (utf8 / plain text or percent-encoded)
   if (trimmed.startsWith('data:image/svg+xml')) {
     const commaIdx = trimmed.indexOf(',')
-    const svgText = decodeURIComponent(trimmed.substring(commaIdx + 1))
-    return new Blob([svgText], { type: 'image/svg+xml' })
+    const rawSvg = trimmed.substring(commaIdx + 1)
+    try {
+      const svgText = decodeURIComponent(rawSvg)
+      return new Blob([svgText], { type: 'image/svg+xml' })
+    } catch {
+      return new Blob([rawSvg], { type: 'image/svg+xml' })
+    }
   }
 
   // Raw base64 string fallback

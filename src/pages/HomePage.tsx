@@ -191,7 +191,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 className="p-2 rounded-2xl bg-white hover:bg-amber-100/70 border border-amber-200 transition-all flex flex-col items-center gap-1.5 cursor-pointer shadow-xs hover:scale-105 active:scale-95"
               >
                 <div className="w-12 h-12 rounded-xl bg-amber-50 overflow-hidden flex items-center justify-center">
-                  <ObjectThumbnail blob={cand.imageBlob} alt={cand.name} />
+                  <ObjectThumbnail blob={cand.imageBlob} imageDataUrl={cand.imageDataUrl} alt={cand.name} />
                 </div>
                 <span className="font-extrabold text-xs text-slate-800 truncate w-full">
                   {cand.name}
@@ -267,7 +267,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 }`}
               >
                 <div className="w-5 h-5 rounded-lg overflow-hidden flex items-center justify-center bg-amber-50">
-                  <ObjectThumbnail blob={obj.imageBlob} alt={obj.name} />
+                  <ObjectThumbnail blob={obj.imageBlob} imageDataUrl={obj.imageDataUrl} alt={obj.name} />
                 </div>
                 <span>{obj.name}</span>
               </button>

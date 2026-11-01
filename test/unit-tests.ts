@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { normalizeText, levenshteinDistance, calculateSimilarity } from '../src/utils/normalization.ts'
 import { parseVoiceCommand } from '../src/utils/commandParser.ts'
 import { ObjectMatcher } from '../src/services/objectMatcher.ts'
-import { blobToBase64, dataUrlToBlob } from '../src/services/backup.ts'
-import { parseAnyWordPack } from '../src/services/universalWordPack.ts'
+import { blobToBase64, dataUrlToBlob, exportBackup } from '../src/services/backup.ts'
+import { parseAnyWordPack, normalizeImageDataUrl } from '../src/services/universalWordPack.ts'
 
 console.log('--- Running Object Speaker / Zumi Unit Tests ---')
 
@@ -255,5 +255,46 @@ assert.equal(parsedWordlearn.words[0].hindiWord, 'कुत्ता')
 assert.ok(parsedWordlearn.words[0].imageDataUrl)
 assert.ok(parsedWordlearn.words[0].audioDataUrl)
 console.log('✔ CogniCard & WordLearn backup compatibility tests passed')
+
+// 7. Test Image Persistence, Normalization, & Detached Blob Resilience
+console.log('Testing image persistence, normalization, & detached blob resilience...')
+
+// Empty data URLs must be rejected rather than returning corrupted empty blobs
+assert.equal(normalizeImageDataUrl('data:image/png;base64,'), undefined)
+assert.equal(normalizeImageDataUrl('data:image/webp;base64,   '), undefined)
+assert.equal(normalizeImageDataUrl(''), undefined)
+
+// Valid PNG data URL must be retained
+const samplePngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+assert.equal(normalizeImageDataUrl(samplePngDataUrl), samplePngDataUrl)
+
+// Test exportBackup with objects holding imageDataUrl
+const testCard = {
+  id: 'card-persisted-1',
+  name: 'Teddy Bear',
+  normalizedName: 'teddy bear',
+  imageDataUrl: samplePngDataUrl,
+  imageBlob: new Blob([]), // Simulating detached/0-byte blob from WebView restart
+  mimeType: 'image/png',
+  createdAt: 1000,
+  updatedAt: 1000,
+}
+
+const exported = await exportBackup([testCard])
+assert.equal(exported.objectCount, 1)
+assert.equal(exported.hasImageCount, 1)
+
+const parsedExport = parseAnyWordPack(exported.jsonString)
+assert.equal(parsedExport.words.length, 1)
+assert.equal(parsedExport.words[0].word, 'teddy bear')
+assert.equal(parsedExport.words[0].imageDataUrl, samplePngDataUrl)
+
+// Ensure dataUrlToBlob correctly resurrects a valid Blob from the persisted data URL
+const recoveredBlob = dataUrlToBlob(parsedExport.words[0].imageDataUrl!, 'image/png')
+assert.ok(recoveredBlob instanceof Blob)
+assert.ok(recoveredBlob.size > 0)
+assert.equal(recoveredBlob.type, 'image/png')
+
+console.log('✔ Image persistence and detached blob resilience tests passed')
 
 console.log('🎉 ALL TESTS PASSED SUCCESSFULLY!')

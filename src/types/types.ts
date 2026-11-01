@@ -5,9 +5,11 @@ export interface ObjectCard {
   alternateNames?: string[]
   normalizedAlternateNames?: string[]
   secondLanguageName?: string
-  imageBlob: Blob
+  imageBlob?: Blob
+  imageDataUrl?: string
   mimeType: string
   audioBlob?: Blob
+  audioDataUrl?: string
   audioMimeType?: string
   createdAt: number
   updatedAt: number

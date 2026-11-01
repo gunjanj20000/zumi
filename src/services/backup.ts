@@ -1,5 +1,6 @@
 import type { ObjectCard, AppSettings } from '../types/types'
 import { getAllObjects, saveObject, updateAppSettings } from './database'
+import { createVectorIllustrationBlob } from './imageProcessing'
 import {
   parseAnyWordPack,
   createUniversalWordPack,
@@ -63,12 +64,43 @@ export async function exportBackup(
       const lower = cleanName.toLowerCase()
       const title = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
 
-      const imageDataUrl = await blobToDataUrl(obj.imageBlob, obj.mimeType || 'image/webp')
-      hasImageCount++
+      // Use permanent imageDataUrl if present; otherwise convert from Blob
+      let imageDataUrl = obj.imageDataUrl
+      if (!imageDataUrl || imageDataUrl.length < 20) {
+        if (obj.imageBlob && (obj.imageBlob instanceof Blob || typeof (obj.imageBlob as any).slice === 'function') && obj.imageBlob.size > 0) {
+          try {
+            imageDataUrl = await blobToDataUrl(obj.imageBlob, obj.mimeType || 'image/webp')
+          } catch {
+            // ignore
+          }
+        }
+      }
 
-      let audioDataUrl: string | undefined = undefined
-      if (obj.audioBlob) {
-        audioDataUrl = await blobToDataUrl(obj.audioBlob, obj.audioMimeType || 'audio/webm')
+      if (!imageDataUrl) {
+        // Fallback to placeholder vector image
+        const normName = lower
+        if (normName === 'apple' || normName === 'bhujia' || normName === 'chocolate' || normName === 'ball' || normName === 'milk') {
+          const blob = createVectorIllustrationBlob(normName as any)
+          imageDataUrl = await blobToDataUrl(blob, 'image/svg+xml')
+        } else {
+          const placeholder = createPlaceholderImageBlob(cleanName)
+          imageDataUrl = await blobToDataUrl(placeholder, 'image/svg+xml')
+        }
+      } else {
+        hasImageCount++
+      }
+
+      let audioDataUrl: string | undefined = obj.audioDataUrl
+      if (!audioDataUrl || audioDataUrl.length < 20) {
+        if (obj.audioBlob && (obj.audioBlob instanceof Blob || typeof (obj.audioBlob as any).slice === 'function') && obj.audioBlob.size > 0) {
+          try {
+            audioDataUrl = await blobToDataUrl(obj.audioBlob, obj.audioMimeType || 'audio/webm')
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (audioDataUrl) {
         hasAudioCount++
       }
 
@@ -177,30 +209,79 @@ export async function importBackup(file: File | string): Promise<BackupImportRes
     const normKey = wordName.toLowerCase()
     const existing = existingByName.get(normKey)
 
-    // Image Blob: from backup or placeholder
-    let imageBlob: Blob
+    // Image: preserve permanent imageDataUrl and create memory imageBlob
+    let imageDataUrl: string | undefined = item.imageDataUrl
+    let imageBlob: Blob | undefined = undefined
     let mimeType = 'image/png'
-    if (item.imageDataUrl) {
-      imageBlob = dataUrlToBlob(item.imageDataUrl, 'image/png')
-      mimeType = imageBlob.type || 'image/png'
-    } else if (existing?.imageBlob) {
-      imageBlob = existing.imageBlob
-      mimeType = existing.mimeType || 'image/webp'
-    } else {
-      imageBlob = createPlaceholderImageBlob(wordName)
-      mimeType = 'image/svg+xml'
+
+    if (imageDataUrl && imageDataUrl.length > 20) {
+      try {
+        imageBlob = dataUrlToBlob(imageDataUrl, 'image/png')
+        mimeType = imageBlob.type || 'image/png'
+      } catch {
+        imageBlob = undefined
+      }
     }
 
-    // Audio Blob: from backup or existing
+    if (!imageBlob || imageBlob.size === 0) {
+      if (existing?.imageDataUrl && existing.imageDataUrl.length > 20) {
+        imageDataUrl = existing.imageDataUrl
+        imageBlob = existing.imageBlob && existing.imageBlob.size > 0
+          ? existing.imageBlob
+          : dataUrlToBlob(imageDataUrl, existing.mimeType || 'image/png')
+        mimeType = existing.mimeType || 'image/png'
+      } else if (existing?.imageBlob && existing.imageBlob.size > 0) {
+        imageBlob = existing.imageBlob
+        mimeType = existing.mimeType || 'image/webp'
+        try {
+          imageDataUrl = await blobToDataUrl(imageBlob, mimeType)
+        } catch {
+          // ignore
+        }
+      } else {
+        // Starter illustration check
+        if (normKey === 'apple' || normKey === 'bhujia' || normKey === 'chocolate' || normKey === 'ball' || normKey === 'milk') {
+          imageBlob = createVectorIllustrationBlob(normKey as any)
+          mimeType = 'image/svg+xml'
+          imageDataUrl = await blobToDataUrl(imageBlob, mimeType)
+        } else {
+          imageBlob = createPlaceholderImageBlob(wordName)
+          mimeType = 'image/svg+xml'
+          imageDataUrl = await blobToDataUrl(imageBlob, mimeType)
+        }
+      }
+    }
+
+    // Audio: preserve permanent audioDataUrl and memory audioBlob
     let audioBlob: Blob | undefined = undefined
     let audioMimeType: string | undefined = undefined
-    const audioUrl = item.audioDataUrl || item.englishAudioBase64
-    if (audioUrl) {
-      audioBlob = dataUrlToBlob(audioUrl, 'audio/mp3')
-      audioMimeType = audioBlob.type || 'audio/mp3'
-    } else if (existing?.audioBlob) {
-      audioBlob = existing.audioBlob
-      audioMimeType = existing.audioMimeType
+    let audioDataUrl: string | undefined = item.audioDataUrl || item.englishAudioBase64
+
+    if (audioDataUrl && audioDataUrl.length > 20) {
+      try {
+        audioBlob = dataUrlToBlob(audioDataUrl, 'audio/mp3')
+        audioMimeType = audioBlob.type || 'audio/mp3'
+      } catch {
+        audioBlob = undefined
+      }
+    }
+
+    if (!audioBlob || audioBlob.size === 0) {
+      if (existing?.audioDataUrl && existing.audioDataUrl.length > 20) {
+        audioDataUrl = existing.audioDataUrl
+        audioBlob = existing.audioBlob && existing.audioBlob.size > 0
+          ? existing.audioBlob
+          : dataUrlToBlob(audioDataUrl, existing.audioMimeType || 'audio/mp3')
+        audioMimeType = existing.audioMimeType || 'audio/mp3'
+      } else if (existing?.audioBlob && existing.audioBlob.size > 0) {
+        audioBlob = existing.audioBlob
+        audioMimeType = existing.audioMimeType
+        try {
+          audioDataUrl = await blobToDataUrl(audioBlob, audioMimeType || 'audio/webm')
+        } catch {
+          // ignore
+        }
+      }
     }
 
     const secondLanguageName = item.hindiWord || existing?.secondLanguageName || undefined
@@ -215,9 +296,11 @@ export async function importBackup(file: File | string): Promise<BackupImportRes
       name: wordName.charAt(0).toUpperCase() + wordName.slice(1),
       alternateNames,
       secondLanguageName,
-      imageBlob,
+      imageBlob: imageBlob || new Blob([]),
+      imageDataUrl,
       mimeType,
       audioBlob,
+      audioDataUrl,
       audioMimeType,
       createdAt: existing?.createdAt || item.createdAt || Date.now(),
       updatedAt: Date.now(),

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import type { ObjectCard } from '../types/types'
 import { processAndCompressImage, createImageUrl, revokeImageUrl } from '../services/imageProcessing'
+import { blobToDataUrl } from '../services/universalWordPack'
 import { Camera, Image as ImageIcon, Plus, X, Upload, Check, Mic, Play, Square, Trash2, Volume2 } from 'lucide-react'
 
 interface ObjectFormProps {
@@ -19,9 +20,11 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
   const [alternateNames, setAlternateNames] = useState<string[]>(initialData?.alternateNames || [])
   const [altInput, setAltInput] = useState('')
   const [imageBlob, setImageBlob] = useState<Blob | null>(initialData?.imageBlob || null)
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(initialData?.imageDataUrl || null)
   const [mimeType, setMimeType] = useState(initialData?.mimeType || 'image/webp')
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initialData?.imageDataUrl || null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(initialData?.audioBlob || null)
+  const [audioDataUrl, setAudioDataUrl] = useState<string | null>(initialData?.audioDataUrl || null)
   const [audioMimeType, setAudioMimeType] = useState(initialData?.audioMimeType || 'audio/webm')
   const [isPlayingAudio, setIsPlayingAudio] = useState(false)
   const [isRecordingAudio, setIsRecordingAudio] = useState(false)
@@ -107,6 +110,7 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
         const blob = new Blob(audioChunksRef.current, { type: finalMime })
         setAudioBlob(blob)
         setAudioMimeType(finalMime)
+        blobToDataUrl(blob, finalMime).then(setAudioDataUrl).catch(() => {})
         stream.getTracks().forEach((track) => track.stop())
         if (recordTimerRef.current) {
           clearInterval(recordTimerRef.current)
@@ -145,7 +149,9 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
     const file = e.target.files?.[0]
     if (!file) return
     setAudioBlob(file)
-    setAudioMimeType(file.type || 'audio/mpeg')
+    const mime = file.type || 'audio/mpeg'
+    setAudioMimeType(mime)
+    blobToDataUrl(file, mime).then(setAudioDataUrl).catch(() => {})
     if (e.target) e.target.value = ''
   }
 
@@ -190,6 +196,12 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
       const processed = await processAndCompressImage(file)
       setImageBlob(processed.blob)
       setMimeType(processed.mimeType)
+      try {
+        const dataUrl = await blobToDataUrl(processed.blob, processed.mimeType)
+        setImageDataUrl(dataUrl)
+      } catch {
+        // ignore
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to process image')
     } finally {
@@ -228,14 +240,21 @@ export const ObjectForm: React.FC<ObjectFormProps> = ({
 
       const id = initialData?.id || `obj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
 
+      const resolvedImageDataUrl =
+        imageDataUrl || (imageBlob ? await blobToDataUrl(imageBlob, mimeType) : undefined)
+      const resolvedAudioDataUrl =
+        audioDataUrl || (audioBlob ? await blobToDataUrl(audioBlob, audioMimeType) : undefined)
+
       await onSave({
         id,
         name: name.trim(),
         alternateNames: alternateNames.length > 0 ? alternateNames : undefined,
         secondLanguageName: secondLanguageName.trim() || undefined,
         imageBlob,
+        imageDataUrl: resolvedImageDataUrl,
         mimeType,
         audioBlob: audioBlob || undefined,
+        audioDataUrl: resolvedAudioDataUrl,
         audioMimeType: audioBlob ? audioMimeType : undefined,
         createdAt: initialData?.createdAt || Date.now(),
         updatedAt: Date.now(),

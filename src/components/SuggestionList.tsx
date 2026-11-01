@@ -56,7 +56,7 @@ export const SuggestionList: React.FC<SuggestionListProps> = ({
             className="w-full text-left px-4 py-3 flex items-center gap-3.5 hover:bg-rose-50/80 active:bg-rose-100 transition-colors cursor-pointer group"
           >
             <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200/60 overflow-hidden flex-shrink-0 flex items-center justify-center shadow-xs">
-              <ObjectThumbnail blob={item.imageBlob} alt={item.name} />
+              <ObjectThumbnail blob={item.imageBlob} imageDataUrl={item.imageDataUrl} alt={item.name} />
             </div>
 
             <div className="flex-1 min-w-0">
