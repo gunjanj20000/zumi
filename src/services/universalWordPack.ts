@@ -334,7 +334,7 @@ export function parseAnyWordPack(input: string | any): ParsedWordPackResult {
     if (!raw || typeof raw !== 'object') continue
 
     const rawWord = String(
-      raw.name || raw.word || raw.text || raw.englishWord || raw.title || ''
+      raw.name || raw.word || raw.text || raw.englishWord || raw.name_english || raw.title || ''
     ).trim()
 
     if (!rawWord) continue
@@ -345,7 +345,7 @@ export function parseAnyWordPack(input: string | any): ParsedWordPackResult {
 
     const upper = rawWord.toUpperCase()
     const title = rawWord.charAt(0).toUpperCase() + rawWord.slice(1)
-    const hindiWord = String(raw.secondLanguageName || raw.hindiWord || '').trim()
+    const hindiWord = String(raw.secondLanguageName || raw.hindiWord || raw.name_hindi || '').trim()
 
     // Alternate names
     const alternateNames: string[] = Array.isArray(raw.alternateNames)
@@ -373,6 +373,7 @@ export function parseAnyWordPack(input: string | any): ParsedWordPackResult {
       raw.image ||
       raw.imageSrc ||
       raw.imageUrl ||
+      raw.image_url ||
       raw.imageBlob
     if (candidateImage) {
       imageDataUrl = normalizeImageDataUrl(candidateImage)

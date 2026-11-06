@@ -12,6 +12,11 @@ import {
   Database,
   AlertCircle,
   Loader2,
+  Sparkles,
+  RefreshCw,
+  GitBranch,
+  ExternalLink,
+  CheckCircle2,
 } from 'lucide-react'
 
 interface SettingsPanelProps {
@@ -77,6 +82,108 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     } finally {
       setIsImporting(false)
       if (e.target) e.target.value = ''
+    }
+  }
+
+  const handleLoad43ObjectsPack = async () => {
+    try {
+      setIsImporting(true)
+      setStatusMessage(null)
+      const res = await fetch('/zumi-objects-compact.json')
+      if (!res.ok) throw new Error('Could not load 43-object pack file')
+      const json = await res.json()
+      const importRes = await importBackup(JSON.stringify(json))
+      if (onRefreshObjects) {
+        await onRefreshObjects()
+      }
+      const total = importRes.objectsImported + importRes.objectsUpdated
+      setStatusMessage({
+        type: 'success',
+        text: `Successfully imported ${total} objects from 43 Objects Pack (${importRes.hasImageCount} photos)!`,
+      })
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Pack load failed: ${err?.message || 'Could not load pack file'}`,
+      })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const [isUpdatingCode, setIsUpdatingCode] = useState(false)
+  const [codeUpdateStatus, setCodeUpdateStatus] = useState<string | null>(null)
+  const [latestCommitInfo, setLatestCommitInfo] = useState<{
+    sha: string
+    message: string
+    date: string
+  } | null>(null)
+
+  const handleUpdateCode = async () => {
+    try {
+      setIsUpdatingCode(true)
+      setCodeUpdateStatus('Checking GitHub repository for latest code...')
+
+      // 1. Fetch latest commit info from GitHub if online
+      let commitMessage = ''
+      try {
+        const resp = await fetch('https://api.github.com/repos/gunjanj20000/zumi/commits/main', {
+          headers: { Accept: 'application/vnd.github.v3+json' },
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data && data.sha) {
+            setLatestCommitInfo({
+              sha: data.sha.substring(0, 7),
+              message: data.commit?.message?.split('\n')[0] || 'Latest code update',
+              date: data.commit?.author?.date || new Date().toISOString(),
+            })
+            commitMessage = data.commit?.message?.split('\n')[0] || ''
+          }
+        }
+      } catch {
+        // Continue even if GitHub API is unreachable (e.g. offline or rate limited)
+      }
+
+      setCodeUpdateStatus('Clearing cached code bundles and service worker...')
+
+      // 2. Unregister / update service worker
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations()
+          for (const reg of registrations) {
+            await reg.update().catch(() => {})
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 3. Clear CacheStorage
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys()
+          for (const key of keys) {
+            await caches.delete(key)
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      setCodeUpdateStatus(
+        commitMessage
+          ? `Updated to latest commit: "${commitMessage}". Reloading...`
+          : 'Code cache cleared! Reloading with latest updates...'
+      )
+
+      // 4. Force reload after brief delay for visual confirmation
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (err: any) {
+      setCodeUpdateStatus(`Update check failed: ${err?.message || 'Network error'}`)
+      setIsUpdatingCode(false)
     }
   }
   return (
@@ -365,22 +472,105 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               className="hidden"
               onChange={handleImportFile}
             />
-            <button
-              type="button"
-              disabled={isExporting || isImporting}
-              onClick={() => importFileInputRef.current?.click()}
-              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-rose-50 text-slate-800 hover:text-rose-700 font-extrabold text-xs sm:text-sm border-2 border-slate-200 hover:border-rose-300 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Importing…
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" /> Import Backup File
-                </>
-              )}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                disabled={isExporting || isImporting}
+                onClick={() => importFileInputRef.current?.click()}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-rose-50 text-slate-800 hover:text-rose-700 font-extrabold text-xs sm:text-sm border-2 border-slate-200 hover:border-rose-300 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Importing…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" /> Import Backup File
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isExporting || isImporting}
+                onClick={handleLoad43ObjectsPack}
+                className="py-2.5 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs sm:text-sm border-2 border-rose-200 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                title="Directly load the 43 imported objects and images with one click"
+              >
+                <Sparkles className="w-4 h-4 text-rose-500" /> Load 43 Objects Pack
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* App & Code Updates Section */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border-2 border-rose-100">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-rose-50">
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+            <GitBranch className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-800">App &amp; Code Updates</h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Update application code and synchronize with the latest GitHub repository changes
+            </p>
+          </div>
+        </div>
+
+        {codeUpdateStatus && (
+          <div className="mb-5 p-3.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-amber-50 text-amber-900 border border-amber-200 animate-fadeIn">
+            {isUpdatingCode ? (
+              <Loader2 className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>{codeUpdateStatus}</span>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl border-2 border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <div className="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-rose-600" /> Repository: gunjanj20000/zumi
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Branch: <code className="bg-slate-200 px-1 py-0.5 rounded text-[11px] font-mono">main</code>
+                {latestCommitInfo && (
+                  <span className="ml-2 font-bold text-slate-700">
+                    • Latest: {latestCommitInfo.sha} ("{latestCommitInfo.message}")
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <a
+                href="https://github.com/gunjanj20000/zumi"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-xs sm:text-sm border-2 border-slate-200 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <ExternalLink className="w-4 h-4 text-slate-500" /> GitHub
+              </a>
+
+              <button
+                type="button"
+                disabled={isUpdatingCode}
+                onClick={handleUpdateCode}
+                className="flex-1 sm:flex-initial py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs sm:text-sm shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isUpdatingCode ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Updating Code…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" /> Update Code &amp; Refresh
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </section>

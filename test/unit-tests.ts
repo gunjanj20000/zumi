@@ -297,4 +297,52 @@ assert.equal(recoveredBlob.type, 'image/png')
 
 console.log('✔ Image persistence and detached blob resilience tests passed')
 
+// 8. Test Converted Zumi 43-Object Pack
+console.log('Testing Converted Zumi 43-Object Pack...')
+import fs from 'node:fs'
+const packPath = './zumi-import-pack.json'
+if (fs.existsSync(packPath)) {
+  const content = fs.readFileSync(packPath, 'utf-8')
+  const parsedPack = parseAnyWordPack(content)
+  assert.equal(parsedPack.words.length, 43, 'Expected 43 objects in converted pack')
+  assert.equal(parsedPack.hasImageCount, 43, 'Expected all 43 objects to have images')
+
+  const compactContent = fs.readFileSync('./zumi-objects-compact.json', 'utf-8')
+  const parsedCompact = parseAnyWordPack(compactContent)
+  assert.equal(parsedCompact.words.length, 43, 'Expected 43 objects in compact pack')
+  assert.equal(parsedCompact.hasImageCount, 43, 'Expected all 43 compact objects to have images')
+
+  // Verify speech matcher with converted objects
+  const convertedCards = parsedCompact.words.map((w) => ({
+    id: w.id,
+    name: w.englishWord,
+    normalizedName: w.word,
+    alternateNames: w.alternateNames,
+    secondLanguageName: w.hindiWord || undefined,
+    imageDataUrl: w.imageDataUrl,
+    imageBlob: dataUrlToBlob(w.imageDataUrl!, 'image/jpeg'),
+    mimeType: 'image/jpeg',
+    createdAt: w.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  }))
+  matcher.updateIndex(convertedCards)
+
+  let voiceRes = matcher.matchObject('remote')
+  assert.equal(voiceRes.object?.name, 'Tv Remote')
+
+  voiceRes = matcher.matchObject('doodh')
+  assert.equal(voiceRes.object?.name, 'Milk')
+
+  voiceRes = matcher.matchObject('glasses')
+  assert.equal(voiceRes.object?.name, 'Chasma')
+
+  voiceRes = matcher.matchObject('mummy ka phone')
+  assert.equal(voiceRes.object?.name, 'Mobile Mummy Ka')
+
+  voiceRes = matcher.matchObject('trash can')
+  assert.equal(voiceRes.object?.name, 'Dustbin')
+
+  console.log('✔ Converted 43-Object Pack parsed and voice matching verified successfully')
+}
+
 console.log('🎉 ALL TESTS PASSED SUCCESSFULLY!')
